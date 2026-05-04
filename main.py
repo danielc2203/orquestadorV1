@@ -20,8 +20,9 @@ async def run_tool_scan(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text(f"⚙️ Escaneando {objetivo}...")
 
     try:
-        # Nos conectamos a Docker en el momento exacto de la petición
-        cliente_docker = docker.from_env()
+                # Forzamos la conexión directa al socket de Docker montado
+        cliente_docker = docker.DockerClient(base_url='unix://var/run/docker.sock')
+
         
         resultado_raw = cliente_docker.containers.run(
             "alpine/nmap",

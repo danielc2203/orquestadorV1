@@ -6,12 +6,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-OLLAMA_URL = os.getenv("OLLAMA_URL", "[http://187.77.206.103:11434/api/generate](http://187.77.206.103:11434/api/generate)")
-
-try:
-    docker_client = docker.from_env()
-except Exception as e:
-    print(f"Error conectando a Docker: {e}")
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://187.77.206.103:11434/api/generate")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("¡Hola! Soy tu Orquestador. Usa /scan <dominio> para ejecutar nmap en un contenedor.")
@@ -25,33 +20,29 @@ async def run_tool_scan(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text(f"⚙️ Escaneando {objetivo}...")
 
     try:
-        resultado_raw = docker_client.containers.run(
+        # Nos conectamos a Docker en el momento exacto de la petición
+        cliente_docker = docker.from_env()
+        
+        resultado_raw = cliente_docker.containers.run(
             "alpine/nmap",
             f"-F {objetivo}",
             auto_remove=True
         )
         resultado_texto = resultado_raw.decode('utf-8')
         
-        # Construimos el mensaje de forma segura sin f-strings complejos
         mensaje_final = "✅ Resultado del escaneo:\n```text\n" + resultado_texto + "\n```"
-        
-        await context.bot.edit_message_text(
-            chat_id=update.effective_chat.id, 
-            message_id=msg.message_id, 
-            text=mensaje_final, 
-            parse_mode='Markdown'
-        )
+        await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=mensaje_final, parse_mode='Markdown')
         
     except Exception as e:
-        await context.bot.edit_message_text(
-            chat_id=update.effective_chat.id, 
-            message_id=msg.message_id, 
-            text=f"❌ Error ejecutando Docker: {str(e)}"
-        )
+        # Si falla la conexión a Docker, ahora nos dirá el motivo real aquí
+        await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"❌ Error real de Docker: {str(e)}")
 
 async def chat_with_ollama(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
     processing_msg = await update.message.reply_text("🧠 Pensando...")
+
+    # Limpiamos la URL por si se guardó con corchetes o comillas en Coolify por accidente
+    clean_url = OLLAMA_URL.replace("[", "").replace("]", "").replace("'", "").replace('"', "")
 
     data = {
         "model": "qwen2.5-coder:7b",
@@ -59,7 +50,7 @@ async def chat_with_ollama(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "stream": False
     }
     
-    req = urllib.request.Request(OLLAMA_URL, data=json.dumps(data).encode('utf-8'), headers={'Content-Type': 'application/json'})
+    req = urllib.request.Request(clean_url, data=json.dumps(data).encode('utf-8'), headers={'Content-Type': 'application/json'})
     
     try:
         with urllib.request.urlopen(req) as response:

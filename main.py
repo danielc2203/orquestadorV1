@@ -13,7 +13,6 @@ try:
     print("Docker CLI ya está instalado.")
 except FileNotFoundError:
     print("Docker CLI no encontrado. Instalando automáticamente...")
-    # Intentamos instalarlo vía apt-get (Nixpacks usa Ubuntu por defecto)
     codigo_salida = os.system("apt-get update && apt-get install -y docker.io")
     if codigo_salida != 0:
         print("Instalando binario estático como plan B...")
@@ -36,19 +35,20 @@ async def run_tool_scan(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     objetivo = context.args[0]
-    msg = await update.message.reply_text(f"⚙️ Levantando contenedor para escanear {objetivo}...")
+    msg = await update.message.reply_text(f"⚙️ Levantando contenedor oficial para escanear {objetivo}...")
 
     try:
-        # Comando docker nativo
-        comando = ["docker", "run", "--rm", "alpine/nmap", "-F", objetivo]
+        # COMANDO A PRUEBA DE BALAS: Usamos la imagen oficial de alpine, instalamos nmap "al vuelo" y escaneamos
+        comando = ["docker", "run", "--rm", "alpine", "sh", "-c", f"apk add --no-cache nmap > /dev/null && nmap -F {objetivo}"]
+        
         resultado = subprocess.run(comando, capture_output=True, text=True, check=True)
         resultado_texto = resultado.stdout
         
-        mensaje_final = "✅ Resultado del escaneo:\n```text\n" + resultado_texto + "\n```"
+        mensaje_final = "✅ **Resultado del escaneo:**\n```text\n" + resultado_texto + "\n```"
         await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=mensaje_final, parse_mode='Markdown')
         
     except subprocess.CalledProcessError as e:
-        await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"❌ Error ejecutando Nmap:\n{e.stderr}")
+        await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"❌ Error ejecutando Nmap:\n{e.stderr}\n\nSalida: {e.stdout}")
     except Exception as e:
         await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"❌ Error inesperado: {str(e)}")
 
@@ -80,7 +80,7 @@ def main():
     application.add_handler(CommandHandler("scan", run_tool_scan))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_with_ollama))
     
-    print("Bot iniciando con soporte de comandos nativos...")
+    print("Bot iniciando con soporte de comandos nativos y Alpine oficial...")
     application.run_polling()
 
 if __name__ == "__main__":

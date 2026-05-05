@@ -5,6 +5,25 @@ import subprocess
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
+# ==========================================
+# AUTO-INSTALADOR DEL CLIENTE DOCKER
+# ==========================================
+try:
+    subprocess.run(["docker", "--version"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    print("Docker CLI ya está instalado.")
+except FileNotFoundError:
+    print("Docker CLI no encontrado. Instalando automáticamente...")
+    # Intentamos instalarlo vía apt-get (Nixpacks usa Ubuntu por defecto)
+    codigo_salida = os.system("apt-get update && apt-get install -y docker.io")
+    if codigo_salida != 0:
+        print("Instalando binario estático como plan B...")
+        os.system("curl -fsSLO https://download.docker.com/linux/static/stable/x86_64/docker-24.0.9.tgz")
+        os.system("tar xzvf docker-24.0.9.tgz")
+        os.system("mv docker/docker /usr/local/bin/")
+        os.system("chmod +x /usr/local/bin/docker")
+        os.system("rm -rf docker docker-24.0.9.tgz")
+# ==========================================
+
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://187.77.206.103:11434/api/generate")
 
@@ -20,24 +39,17 @@ async def run_tool_scan(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text(f"⚙️ Levantando contenedor para escanear {objetivo}...")
 
     try:
-        # Usamos subprocess para ejecutar el comando docker nativo directamente
-        # Esto equivale a escribir: docker run --rm alpine/nmap -F dominio.com
+        # Comando docker nativo
         comando = ["docker", "run", "--rm", "alpine/nmap", "-F", objetivo]
-        
-        # Ejecutamos el comando y capturamos la salida
         resultado = subprocess.run(comando, capture_output=True, text=True, check=True)
-        
-        # Si fue exitoso, tomamos la salida estándar (stdout)
         resultado_texto = resultado.stdout
         
         mensaje_final = "✅ Resultado del escaneo:\n```text\n" + resultado_texto + "\n```"
         await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=mensaje_final, parse_mode='Markdown')
         
     except subprocess.CalledProcessError as e:
-        # Si el comando de docker falla por alguna razón
-        await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"❌ Error ejecutando Nmap: {e.stderr}")
+        await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"❌ Error ejecutando Nmap:\n{e.stderr}")
     except Exception as e:
-        # Cualquier otro error de Python
         await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"❌ Error inesperado: {str(e)}")
 
 async def chat_with_ollama(update: Update, context: ContextTypes.DEFAULT_TYPE):

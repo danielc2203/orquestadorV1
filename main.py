@@ -2,8 +2,17 @@ import os
 import json
 import urllib.request
 import subprocess
+import re
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+
+
+
+def limpiar_ansi(texto):
+    """Elimina los códigos de escape ANSI (colores) del texto crudo de la terminal."""
+    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    return ansi_escape.sub('', texto)
+
 
 # ==========================================
 # AUTO-INSTALADOR DEL CLIENTE DOCKER
@@ -102,6 +111,9 @@ async def run_github_tool(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Ejecutamos con un timeout de 3 minutos (180 segundos)
         resultado = subprocess.run(comando, capture_output=True, text=True, timeout=180)
         resultado_texto = resultado.stdout
+
+        resultado_texto = limpiar_ansi(resultado.stdout) # ¡Esto dejará el texto puro y legible!
+
         
         # Telegram tiene un límite de 4096 caracteres por mensaje. Truncamos si es muy largo.
         if len(resultado_texto) > 3500:

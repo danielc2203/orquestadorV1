@@ -19,8 +19,8 @@ async def run_tool_scan(update: Update, context: ContextTypes.DEFAULT_TYPE):
     objetivo = context.args[0]
     msg = await update.message.reply_text(f"⚙️ Escaneando {objetivo}...")
 
-        try:
-        # Usamos la conexión estándar basada en entorno
+    try:
+        # Usamos la conexión estándar basada en la variable DOCKER_HOST de Coolify
         cliente_docker = docker.from_env()
         
         resultado_raw = cliente_docker.containers.run(
@@ -35,7 +35,6 @@ async def run_tool_scan(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     except Exception as e:
         await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"❌ Error real de Docker: {str(e)}")
-
 
 async def chat_with_ollama(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text

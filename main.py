@@ -1,7 +1,7 @@
 import os
 import json
 import urllib.request
-import docker
+import subprocess
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
@@ -9,7 +9,7 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://187.77.206.103:11434/api/generate")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("¡Hola! Soy tu Orquestador. Usa /scan <dominio> para ejecutar nmap en un contenedor.")
+    await update.message.reply_text("¡Hola! Soy tu Orquestador. Usa /scan <dominio> para ejecutar nmap en un contenedor efímero.")
 
 async def run_tool_scan(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
@@ -17,24 +17,28 @@ async def run_tool_scan(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     objetivo = context.args[0]
-    msg = await update.message.reply_text(f"⚙️ Escaneando {objetivo}...")
+    msg = await update.message.reply_text(f"⚙️ Levantando contenedor para escanear {objetivo}...")
 
     try:
-        # Conexión directa y explícita usando la versión estable de la librería
-        cliente_docker = docker.DockerClient(base_url='unix://var/run/docker.sock')
+        # Usamos subprocess para ejecutar el comando docker nativo directamente
+        # Esto equivale a escribir: docker run --rm alpine/nmap -F dominio.com
+        comando = ["docker", "run", "--rm", "alpine/nmap", "-F", objetivo]
         
-        resultado_raw = cliente_docker.containers.run(
-            "alpine/nmap",
-            f"-F {objetivo}",
-            auto_remove=True
-        )
-        resultado_texto = resultado_raw.decode('utf-8')
+        # Ejecutamos el comando y capturamos la salida
+        resultado = subprocess.run(comando, capture_output=True, text=True, check=True)
+        
+        # Si fue exitoso, tomamos la salida estándar (stdout)
+        resultado_texto = resultado.stdout
         
         mensaje_final = "✅ Resultado del escaneo:\n```text\n" + resultado_texto + "\n```"
         await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=mensaje_final, parse_mode='Markdown')
         
+    except subprocess.CalledProcessError as e:
+        # Si el comando de docker falla por alguna razón
+        await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"❌ Error ejecutando Nmap: {e.stderr}")
     except Exception as e:
-        await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"❌ Error de Docker: {str(e)}")
+        # Cualquier otro error de Python
+        await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"❌ Error inesperado: {str(e)}")
 
 async def chat_with_ollama(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
@@ -64,7 +68,7 @@ def main():
     application.add_handler(CommandHandler("scan", run_tool_scan))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_with_ollama))
     
-    print("Bot iniciando...")
+    print("Bot iniciando con soporte de comandos nativos...")
     application.run_polling()
 
 if __name__ == "__main__":
